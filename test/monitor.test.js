@@ -2,12 +2,32 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   isKnicksHomeGame,
+  isPubliclyOnSale,
   isScheduledCheckTime,
   readConfig,
 } = require('../monitor');
 
 test('loads the supported default interval', () => {
   assert.deepEqual(readConfig(), { checkIntervalMinutes: 15 });
+});
+
+test('requires a current, non-TBD public sale before alerting', () => {
+  const now = new Date('2026-08-21T21:00:00Z');
+  const event = {
+    dates: { status: { code: 'onsale' } },
+    sales: { public: { startTBD: false, startDateTime: '2026-08-21T20:00:00Z' } },
+  };
+
+  assert.equal(isPubliclyOnSale(event, now), true);
+  assert.equal(isPubliclyOnSale({ ...event, dates: { status: { code: 'offsale' } } }, now), false);
+  assert.equal(isPubliclyOnSale({ ...event, sales: { public: { startTBD: true } } }, now), false);
+  assert.equal(
+    isPubliclyOnSale({
+      ...event,
+      sales: { public: { startTBD: false, startDateTime: '2026-08-22T20:00:00Z' } },
+    }, now),
+    false,
+  );
 });
 
 test('15-minute checks run at 7, 22, 37, and 52 minutes past the hour', () => {

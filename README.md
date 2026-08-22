@@ -1,6 +1,6 @@
 # Knicks Ticket Monitor
 
-Get a Telegram notification when new **New York Knicks home-game tickets at Madison Square Garden** appear in Ticketmaster's official event API.
+Get a Telegram notification when **New York Knicks home-game tickets at Madison Square Garden go on public sale** according to Ticketmaster's official event API.
 
 The monitor checks approximately every 15 minutes in GitHub's cloud. Your computer does not need to stay on. It does not reserve tickets, add tickets to a cart, or make purchases.
 
@@ -108,7 +108,9 @@ The monitor accepts an event only when Ticketmaster identifies both:
 - The New York Knicks as an attraction
 - Madison Square Garden in New York as the venue
 
-When it discovers an event ID it has not seen before, it sends the event date, matchup, and Ticketmaster link to Telegram. Successfully processed IDs are saved in `state.json` so each event is announced once. If Telegram delivery fails, the event remains eligible for retry.
+An event appearing on the schedule is not enough to trigger an alert. The monitor waits until Ticketmaster reports the event as `onsale`, the public-sale date is not marked TBD, and any published public-sale start time has arrived. It then sends the event date, matchup, and Ticketmaster link to Telegram.
+
+The latest sale state for each event is saved in `state.json`. An event is announced when it transitions from unavailable to publicly on sale. If it later goes off sale and returns, it can be announced again. If Telegram delivery fails, the transition remains eligible for retry.
 
 GitHub scheduled jobs can occasionally begin a few minutes late.
 
@@ -179,5 +181,5 @@ Open **Settings → Actions → General → Workflow permissions**, select **Rea
 
 - Ticketmaster controls which events appear in the Discovery API and when they appear.
 - GitHub Actions schedules are approximate and may be delayed.
-- This project detects listings; it does not guarantee ticket availability by the time a link is opened.
+- This project detects Ticketmaster's public on-sale status; it cannot guarantee that seats remain available by the time a link is opened.
 - This is an independent fan project and is not affiliated with the New York Knicks, Madison Square Garden, Ticketmaster, Telegram, or GitHub.

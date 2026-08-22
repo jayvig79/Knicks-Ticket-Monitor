@@ -98,6 +98,27 @@ function isKnicksHomeGame(event, attractionId, venueId) {
   return attractionIds.includes(attractionId) && venueIds.includes(venueId);
 }
 
+function isPubliclyOnSale(event, now = new Date()) {
+  if (event.dates?.status?.code !== 'onsale') return false;
+
+  const publicSale = event.sales?.public;
+  if (publicSale?.startTBD === true) return false;
+
+  const startTime = Date.parse(publicSale?.startDateTime || '');
+  if (Number.isFinite(startTime) && startTime > now.getTime()) return false;
+
+  return true;
+}
+
+function saleObservation(event, now = new Date()) {
+  return {
+    onSale: isPubliclyOnSale(event, now),
+    statusCode: event.dates?.status?.code || 'unknown',
+    publicSaleStart: event.sales?.public?.startDateTime || null,
+    publicSaleStartTBD: event.sales?.public?.startTBD === true,
+  };
+}
+
 async function fetchHomeGames(attractionId, venueId) {
   const data = await apiGet('events', {
     attractionId,
@@ -140,7 +161,7 @@ async function sendEventAlert(events) {
   const shown = events.slice(0, 10);
   const remaining = events.length - shown.length;
   const text = [
-    `🏀 ${events.length} new Knicks home game${events.length === 1 ? '' : 's'} found on Ticketmaster:`,
+    `🏀 Tickets are now on sale for ${events.length} Knicks home game${events.length === 1 ? '' : 's'}:`,
     '',
     ...shown.map(eventLine),
     remaining > 0 ? `\n…and ${remaining} more.` : '',
@@ -160,23 +181,32 @@ async function main() {
   const attractionId = state.attractionId || await resolveAttractionId();
   const venueId = state.venueId || await resolveVenueId();
   const events = await fetchHomeGames(attractionId, venueId);
-  const knownIds = new Set(state.knownEventIds || []);
-  const newEvents = events.filter(event => !knownIds.has(event.id));
+  const previousSaleStates = state.eventSaleStates || {};
+  const currentSaleStates = Object.fromEntries(
+    events.map(event => [event.id, saleObservation(event)]),
+  );
+  const onSaleEvents = events.filter(event => currentSaleStates[event.id].onSale);
+  const newlyOnSaleEvents = onSaleEvents.filter(
+    event => previousSaleStates[event.id]?.onSale !== true,
+  );
 
-  console.log(`Found ${events.length} Knicks home game(s); ${newEvents.length} new.`);
+  console.log(
+    `Found ${events.length} Knicks home game(s); ${onSaleEvents.length} on sale; `
+    + `${newlyOnSaleEvents.length} newly on sale.`,
+  );
   if (process.argv.includes('--test-alert')) {
     await sendTelegramText(
-      `✅ Knicks ticket monitor test succeeded. Ticketmaster returned ${events.length} current home game${events.length === 1 ? '' : 's'} at Madison Square Garden. Scheduled monitoring is active.`,
+      `✅ Knicks ticket monitor test succeeded. Ticketmaster returned ${events.length} current home game${events.length === 1 ? '' : 's'} at Madison Square Garden; ${onSaleEvents.length} ${onSaleEvents.length === 1 ? 'is' : 'are'} currently marked publicly on sale. Scheduled monitoring is active.`,
     );
     console.log('Telegram test alert sent. Test mode does not change notification state.');
     return;
   }
 
-  if (newEvents.length > 0) await sendEventAlert(newEvents);
+  if (newlyOnSaleEvents.length > 0) await sendEventAlert(newlyOnSaleEvents);
   writeState({
     attractionId,
     venueId,
-    knownEventIds: [...new Set([...knownIds, ...events.map(event => event.id)])].sort(),
+    eventSaleStates: { ...previousSaleStates, ...currentSaleStates },
   });
 }
 
@@ -189,6 +219,8 @@ if (require.main === module) {
 
 module.exports = {
   isKnicksHomeGame,
+  isPubliclyOnSale,
   isScheduledCheckTime,
   readConfig,
+  saleObservation,
 };
